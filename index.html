@@ -536,6 +536,13 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 resetRace();
+if(location.hash==='#shot'||location.hash==='#icon'){
+  state='shot';$('menu').style.display='none';
+  ['hud','mapWrap','region'].forEach(id=>$(id).style.display='none');
+  const t=document.createElement('div');
+  t.style.cssText='position:fixed;left:0;right:0;top:6%;text-align:center;font-size:4.4vw;white-space:nowrap;font-weight:bold;color:#fff;text-shadow:0 4px 14px #000c';
+  if(location.hash==='#icon')t.style.display='none';t.textContent='🏎️ 레이싱으로 제주를 알아가는 방법';document.body.appendChild(t);
+}
 requestAnimationFrame(loop);
 })();
 </script>
