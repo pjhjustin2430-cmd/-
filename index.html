@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>제주 레이싱</title>
+<meta property="og:type" content="website">
+<meta property="og:title" content="레이싱으로 제주를 알아가는 방법">
+<meta property="og:description" content="한라산, 해안도로, 만장굴, 천지연 폭포, 벚꽃길을 달리며 미니게임으로 제주를 만나는 three.js 레이싱 게임">
+<meta property="og:image" content="https://YOUR-SITE.vercel.app/images/og.png">
+<meta property="og:url" content="https://YOUR-SITE.vercel.app/">
+<link rel="apple-touch-icon" href="/images/icon-180.png">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:#bfe3f5;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#fff;user-select:none}
+  canvas#c{display:block;width:100%;height:100%}
+  .panel{background:rgba(10,30,45,.62);border-radius:12px;padding:10px 14px;backdrop-filter:blur(4px)}
+  #hud{position:fixed;left:14px;top:14px;line-height:1.5;font-size:18px;min-width:190px}
+  #hud b{font-size:26px}
+  #speed{font-size:40px;font-weight:bold}
+  #nitroWrap{width:160px;height:8px;background:#0006;border-radius:4px;margin-top:6px;overflow:hidden}
+  #nitro{height:100%;width:100%;background:#35e0ff}
+  #mapWrap{position:fixed;right:14px;bottom:14px;padding:6px}
+  #region{position:fixed;top:18px;left:50%;transform:translateX(-50%);font-size:26px;font-weight:bold;padding:8px 22px;opacity:0;transition:opacity .6s;text-shadow:0 2px 4px #000a}
+  #toast{position:fixed;top:30%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:bold;text-shadow:0 3px 8px #000c;opacity:0;transition:opacity .4s;text-align:center;pointer-events:none}
+  #big{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:140px;font-weight:bold;text-shadow:0 6px 20px #000b;pointer-events:none}
+  .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(5,20,35,.55);z-index:10}
+  .card{background:#12303f;border:2px solid #4fd1c5;border-radius:18px;padding:28px 36px;max-width:640px;text-align:center;box-shadow:0 10px 40px #0008}
+  .card h1{margin:0 0 6px;font-size:34px;color:#ffd166}
+  .card h2{margin:0 0 8px;color:#ffd166}
+  .card p{margin:6px 0;line-height:1.6;color:#dff}
+  .card small{color:#9cc}
+  button{background:#ff8a00;color:#fff;border:0;border-radius:10px;padding:12px 30px;font-size:20px;font-weight:bold;cursor:pointer;margin-top:14px;font-family:inherit}
+  button:hover{background:#ffa133}
+  .keys span{display:inline-block;background:#244b5e;border-radius:6px;padding:2px 9px;margin:0 2px;font-weight:bold}
+  .area{position:relative;width:520px;height:300px;margin:10px auto;border-radius:12px;overflow:hidden;background:linear-gradient(#7ac36a,#4e9a44);cursor:crosshair}
+  .orange{position:absolute;width:46px;height:46px;font-size:38px;line-height:46px;text-align:center;cursor:pointer;animation:pop .15s}
+  @keyframes pop{from{transform:scale(.2)}to{transform:scale(1)}}
+  #bar{position:relative;width:480px;height:44px;margin:16px auto;background:#245;border-radius:10px;overflow:hidden}
+  #zone{position:absolute;top:0;height:100%;background:#35d07f88;border-left:2px solid #7fffb0;border-right:2px solid #7fffb0}
+  #marker{position:absolute;top:0;width:8px;height:100%;background:#fff}
+  #mz{background:#d9c9a0;border-radius:6px;margin:10px auto;display:block}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud" class="panel">
+  <div>LAP <b id="lap">1</b> / <span id="laps">3</span></div>
+  <div>TIME <b id="time">0:00.0</b></div>
+  <div id="bonusTxt" style="font-size:15px;color:#ffd166"></div>
+  <div><span id="speed">0</span> km/h</div>
+  <div id="nitroWrap"><div id="nitro"></div></div>
+</div>
+<div id="region" class="panel"></div>
+<div id="toast"></div>
+<div id="big"></div>
+<div id="mapWrap" class="panel"><canvas id="map" width="160" height="120"></canvas></div>
+
+<div id="menu" class="overlay"><div class="card">
+  <h1>🏎️ 레이싱으로 제주를 알아가는 방법</h1>
+  <p>한라산, 해안도로, 우도, 만장굴, 천지연 폭포, 벚꽃길, 사려니숲길…<br>제주의 풍경을 달리며 미니게임으로 제주를 만나 보세요!</p>
+  <p>3바퀴를 가장 빨리 달리세요. 길 위의 <b style="color:#ffd166">황금 링</b>을 통과하면 미니게임이 시작되고,<br>성공하면 <b>기록 −3초</b> 보너스!</p>
+  <p class="keys"><span>↑</span><span>↓</span><span>←</span><span>→</span> 또는 <span>W</span><span>A</span><span>S</span><span>D</span> 운전 &nbsp; <span>Shift</span> 니트로</p>
+  <p><small id="best"></small></p>
+  <button id="startBtn">출발하기</button>
+</div></div>
+
+<div id="mini" class="overlay" style="display:none"><div class="card" id="miniBox"></div></div>
+<div id="end" class="overlay" style="display:none"><div class="card" id="endBox"></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const LAPS=3, N=600, W=8;
+
+// ---------- 난수 ----------
+let seed=7; const rnd=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
+const rr=(a,b)=>a+(b-a)*rnd();
+
+// ---------- 씬 ----------
+const renderer=new THREE.WebGLRenderer({canvas:$('c'),antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene();
+const SKY=0xbfe3f5;
+scene.background=new THREE.Color(SKY);
+scene.fog=new THREE.Fog(SKY,160,900);
+const camera=new THREE.PerspectiveCamera(65,1,1,3000);
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+scene.add(new THREE.HemisphereLight(0xffffff,0x6a8f5a,.85));
+const sun=new THREE.DirectionalLight(0xfff2cc,.8);sun.position.set(200,300,100);scene.add(sun);
+
+const M=(c,o)=>new THREE.MeshLambertMaterial(Object.assign({color:c},o||{}));
+
+// ---------- 트랙 ----------
+const PTS=[[0,-200],[150,-170],[230,-40],[180,90],[60,150],[-40,100],[-140,150],[-230,40],[-180,-100],[-90,-170]];
+const curve=new THREE.CatmullRomCurve3(PTS.map(p=>new THREE.Vector3(p[0],0,p[1])),true,'catmullrom',0.5);
+const P=curve.getSpacedPoints(N);P.pop();
+const T=P.map((p,i)=>P[(i+1)%N].clone().sub(p).setY(0).normalize());
+const OUT=P.map((p,i)=>{const t=T[i];const n=new THREE.Vector3(t.z,0,-t.x);if(n.dot(p)<0)n.negate();return n;});
+const off=(i,o)=>{i=((i%N)+N)%N;return P[i].clone().addScaledVector(OUT[i],o);};
+const ang=i=>{i=((i%N)+N)%N;return Math.atan2(T[i].x,T[i].z);};
+
+function ribbon(a,b,color,y,filter){
+  const pos=[],idx=[];let k=0;
+  for(let i=0;i<N;i++){
+    if(filter&&!filter(i))continue;
+    const j=(i+1)%N;
+    const q=[off(i,a),off(i,b),off(j,a),off(j,b)];
+    q.forEach(v=>pos.push(v.x,y,v.z));
+    idx.push(k,k+1,k+2,k+1,k+3,k+2);k+=4;
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  g.setIndex(idx);g.computeVertexNormals();
+  const m=new THREE.Mesh(g,M(color,{side:THREE.DoubleSide}));scene.add(m);return m;
+}
+// 지면
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(4000,4000),M(0x7fb86a));
+ground.rotation.x=-Math.PI/2;scene.add(ground);
+// 도로
+ribbon(-W,W,0x45484f,0.25);
+ribbon(-W+0.4,-W+0.9,0xffffff,0.4);
+ribbon(W-0.9,W-0.4,0xffffff,0.4);
+ribbon(-0.25,0.25,0xffd23f,0.4,i=>(i%8)<4);
+// 출발선
+for(let c=0;c<8;c++){
+  const b=new THREE.Mesh(new THREE.BoxGeometry(2,.1,2),M(c%2?0xffffff:0x111111));
+  const p=off(0,-W+1+c*2);p.y=.45;
+  b.position.copy(p);b.rotation.y=ang(0);scene.add(b);
+}
+
+function nearest(x,z){
+  let bi=0,bd=1e12;
+  for(let i=0;i<N;i++){const dx=P[i].x-x,dz=P[i].z-z,d=dx*dx+dz*dz;if(d<bd){bd=d;bi=i;}}
+  return {i:bi,d:Math.sqrt(bd)};
+}
+
+// ---------- 인스턴싱 ----------
+const dummy=new THREE.Object3D();
+function inst(geo,mat,items){
+  if(!items.length)return;
+  const m=new THREE.InstancedMesh(geo,mat,items.length);
+  items.forEach((it,i)=>{
+    dummy.position.set(it[0],it[1],it[2]);dummy.scale.set(it[3],it[4],it[5]);dummy.rotation.set(0,it[6]||0,0);dummy.updateMatrix();
+    m.setMatrixAt(i,dummy.matrix);
+    if(it[7]!==undefined)m.setColorAt(i,new THREE.Color(it[7]));
+  });
+  m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;
+  scene.add(m);
+}
+const trunks=[],pines=[],balls=[],pinkBalls=[],oranges=[],walls=[],fields=[];
+
+// ---------- 한라산 ----------
+const HX=0,HZ=10,HR=84;
+{
+  const base=new THREE.Mesh(new THREE.ConeGeometry(HR+4,110,40),M(0x5b7f4f));base.position.set(HX,55,HZ);scene.add(base);
+  const mid=new THREE.Mesh(new THREE.ConeGeometry(45,60,40),M(0x7a6a58));mid.position.set(HX,80,HZ);scene.add(mid);
+  const cap=new THREE.Mesh(new THREE.ConeGeometry(19,24,40),M(0xffffff));cap.position.set(HX,98,HZ);scene.add(cap);
+}
+// ---------- 바다 / 해안 / 우도 ----------
+const SEA_X=278;
+{
+  const sand=new THREE.Mesh(new THREE.PlaneGeometry(40,900),M(0xf0dfae));sand.rotation.x=-Math.PI/2;sand.position.set(SEA_X-8,0.1,0);scene.add(sand);
+  const sea=new THREE.Mesh(new THREE.PlaneGeometry(2500,1600),M(0x2ba3d8));sea.rotation.x=-Math.PI/2;sea.position.set(SEA_X+12+1250,0.2,0);scene.add(sea);
+  const isl=new THREE.Mesh(new THREE.SphereGeometry(45,24,12,0,Math.PI*2,0,Math.PI/2),M(0x69b85a));isl.scale.set(1.6,.45,1);isl.position.set(520,0.2,40);scene.add(isl);
+  const beach=new THREE.Mesh(new THREE.CylinderGeometry(80,86,.6,28),M(0xf5e6b5));beach.position.set(520,.1,40);beach.scale.set(1,1,.62);scene.add(beach);
+  const lh=new THREE.Mesh(new THREE.CylinderGeometry(1.2,2,16,10),M(0xffffff));lh.position.set(540,14,40);scene.add(lh);
+  const lt=new THREE.Mesh(new THREE.CylinderGeometry(2.2,2.2,3,10),M(0xff5050));lt.position.set(540,23,40);scene.add(lt);
+}
+// ---------- 나무 (일반) ----------
+function addPine(x,z,s,col){
+  trunks.push([x,1.5*s,z,.8*s,3*s,.8*s,0]);
+  pines.push([x,(3+4)*s,z,s,s,s,0,col]);
+}
+for(let t=0;t<420;t++){
+  const x=rr(-420,262),z=rr(-380,380);
+  if(Math.hypot(x-HX,z-HZ)<HR+14)continue;
+  if(nearest(x,z).d<18)continue;
+  if(Math.abs(x)>HR&&x>SEA_X-12)continue;
+  addPine(x,z,rr(.9,1.6),[0x2f7a3a,0x3d8b44,0x4c9a4a][Math.floor(rnd()*3)]);
+}
+// ---------- 밭(유채꽃 · 흙) ----------
+for(let t=0;t<90;t++){
+  const x=rr(-420,250),z=rr(-380,380);
+  if(Math.hypot(x-HX,z-HZ)<HR+16)continue;
+  if(nearest(x,z).d<26)continue;
+  const col=[0xf2d230,0xf2d230,0x8fd46a,0x9a6b3d,0x6bb04e][Math.floor(rnd()*5)];
+  fields.push([x,.08,z,rr(14,30),.1,rr(14,30),rr(0,3),col]);
+}
+// ---------- 감귤밭 + 돌담 (구간 570~600, 0~60) ----------
+const inRange=(i,a,b)=>i>=a&&i<=b;
+for(let i=565;i<N+60;i+=3){
+  const k=i%N;
+  for(const o of [18,24,30,-18,-24,-30]){
+    const p=off(k,o);
+    if(o<0&&Math.hypot(p.x-HX,p.z-HZ)<HR+20)continue;
+    trunks.push([p.x,1,p.z,.5,2,.5,0]);
+    const s=rr(.9,1.2);
+    balls.push([p.x,3.6,p.z,2.8*s,2.8*s,2.8*s,0,0x3f9a3a]);
+    for(let q=0;q<5;q++){
+      const a=rr(0,6.28),h=rr(2.6,4.8);
+      oranges.push([p.x+Math.cos(a)*2.7*s,h,p.z+Math.sin(a)*2.7*s,.55,.55,.55,0]);
+    }
+  }
+}
+function stoneWall(a,b,o){
+  for(let i=a;i<b;i+=1){
+    const p=off(i,o);
+    walls.push([p.x,.7+rr(0,.2),p.z,2.6,1.4+rr(0,.3),1.1,ang(i)+rr(-.06,.06),[0x3d3b3a,0x4b4745,0x59534f][Math.floor(rnd()*3)]]);
+  }
+}
+stoneWall(565,N,W+4);stoneWall(565,N,-W-4);stoneWall(0,62,W+4);stoneWall(0,62,-W-4);
+// ---------- 벚꽃길 (430~500) ----------
+for(let i=430;i<=500;i+=3){
+  for(const o of [-W-4,W+4]){
+    const p=off(i,o);
+    trunks.push([p.x,2,p.z,.9,4,.9,0]);
+    pinkBalls.push([p.x,6.2,p.z,4.2,3.4,4.2,0,[0xffb7d0,0xffc9dc,0xffa6c4][Math.floor(rnd()*3)]]);
+  }
+}
+// ---------- 사려니숲길 (500~590) ----------
+for(let i=505;i<=590;i+=2){
+  for(const o of [-W-3,W+3,-W-10,W+10]){
+    const p=off(i,o+rr(-1.5,1.5));
+    if(Math.hypot(p.x-HX,p.z-HZ)<HR+8)continue;
+    addPine(p.x,p.z,rr(1.7,2.4),[0x1f5a2c,0x256b33,0x2a7a3a][Math.floor(rnd()*3)]);
+  }
+}
+// ---------- 만장굴 터널 (205~235) ----------
+{
+  const g=new THREE.TorusGeometry(W+2.5,1.6,6,18,Math.PI),mat=M(0x3a3a44);
+  for(let i=205;i<=235;i++){
+    const a=new THREE.Mesh(g,mat);a.position.copy(P[i]);a.position.y=.25;a.rotation.y=ang(i);scene.add(a);
+  }
+  const lamp=new THREE.PointLight(0xffc070,1,60);lamp.position.copy(P[220]);lamp.position.y=8;scene.add(lamp);
+}
+// ---------- 천지연 폭포 (idx 285) ----------
+{
+  const g=new THREE.Group();
+  const cliff=new THREE.Mesh(new THREE.BoxGeometry(46,30,10),M(0x6b6258));cliff.position.set(0,15,0);g.add(cliff);
+  const top=new THREE.Mesh(new THREE.BoxGeometry(50,6,14),M(0x3f7f3a));top.position.set(0,32,0);g.add(top);
+  const fall=new THREE.Mesh(new THREE.BoxGeometry(8,28,1),M(0xdff6ff,{transparent:true,opacity:.85}));fall.position.set(0,16,5.3);g.add(fall);
+  const pool=new THREE.Mesh(new THREE.CylinderGeometry(14,14,.4,24),M(0x3fb6e8));pool.position.set(0,.4,13);g.add(pool);
+  g.position.copy(off(285,40));g.lookAt(P[285].x,0,P[285].z);scene.add(g);
+}
+// ---------- 미로 장식 (idx 380) ----------
+{
+  const c=off(380,36);
+  const hm=M(0x2f8a3a);
+  for(let r=0;r<5;r++){
+    const a=new THREE.Mesh(new THREE.BoxGeometry(34,5,2),hm);a.position.set(c.x,2.5,c.z-16+r*8);scene.add(a);
+  }
+  for(let r=0;r<4;r++){
+    const b=new THREE.Mesh(new THREE.BoxGeometry(2,5,(r%2?22:14)),hm);b.position.set(c.x-14+r*9,2.5,c.z+(r%2?-2:2));scene.add(b);
+  }
+}
+// ---------- 인스턴스 반영 ----------
+const trunkMat=M(0x7a5230);
+inst(new THREE.CylinderGeometry(1,1.2,1,6),trunkMat,trunks);
+inst(new THREE.ConeGeometry(3.2,8,7),M(0xffffff),pines);
+inst(new THREE.SphereGeometry(1,10,8),M(0xffffff),balls);
+inst(new THREE.SphereGeometry(1,10,8),M(0xffffff),pinkBalls);
+inst(new THREE.SphereGeometry(1,8,6),M(0xff8a00),oranges);
+inst(new THREE.BoxGeometry(1,1,1),M(0xffffff),walls);
+inst(new THREE.BoxGeometry(1,1,1),M(0xffffff),fields);
+
+// ---------- 미니게임 게이트 ----------
+function label(text,color){
+  const c=document.createElement('canvas');c.width=512;c.height=128;const x=c.getContext('2d');
+  x.fillStyle='rgba(10,30,45,.8)';x.beginPath();x.roundRect?x.roundRect(4,4,504,120,24):x.rect(4,4,504,120);x.fill();
+  x.strokeStyle=color;x.lineWidth=6;x.stroke();
+  x.fillStyle='#fff';x.font='bold 54px "Malgun Gothic",sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(text,256,66);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true}));
+  s.scale.set(22,5.5,1);return s;
+}
+const gates=[
+  {idx:30,type:'orange',name:'🍊 감귤 따기',done:false},
+  {idx:285,type:'fall',name:'💧 천지연 타이밍',done:false},
+  {idx:380,type:'maze',name:'🌿 미로 탈출',done:false},
+];
+gates.forEach(g=>{
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(7,.6,8,32),new THREE.MeshBasicMaterial({color:0xffd23f}));
+  ring.position.copy(P[g.idx]);ring.position.y=7.5;ring.rotation.y=ang(g.idx);scene.add(ring);
+  const lb=label(g.name,'#ffd23f');lb.position.copy(P[g.idx]);lb.position.y=18;scene.add(lb);
+  g.ring=ring;g.pos=P[g.idx];
+});
+
+// ---------- 자동차 ----------
+const car=new THREE.Group();
+{
+  const body=new THREE.Mesh(new THREE.BoxGeometry(2.4,.9,4.6),M(0xff7a00));body.position.y=.85;car.add(body);
+  const cab=new THREE.Mesh(new THREE.BoxGeometry(2,.8,2.2),M(0x9ad7ff));cab.position.set(0,1.65,-.2);car.add(cab);
+  const sp=new THREE.Mesh(new THREE.BoxGeometry(2.4,.12,.7),M(0x222222));sp.position.set(0,1.6,-2.1);car.add(sp);
+  const wg=new THREE.CylinderGeometry(.5,.5,.45,12),wm=M(0x151515);
+  [[-1.25,1.5],[1.25,1.5],[-1.25,-1.5],[1.25,-1.5]].forEach(([x,z])=>{
+    const w=new THREE.Mesh(wg,wm);w.rotation.z=Math.PI/2;w.position.set(x,.5,z);car.add(w);
+  });
+  const hl=M(0xfff6b0);[-0.8,0.8].forEach(x=>{const l=new THREE.Mesh(new THREE.BoxGeometry(.5,.3,.1),hl);l.position.set(x,.95,2.32);car.add(l);});
+  const sh=new THREE.Mesh(new THREE.CircleGeometry(2.8,16),new THREE.MeshBasicMaterial({color:0,transparent:true,opacity:.3}));
+  sh.rotation.x=-Math.PI/2;sh.position.y=.02;sh.scale.set(1,1.5,1);car.add(sh);
+}
+scene.add(car);
+
+// ---------- 상태 ----------
+let state='menu';
+const S={x:0,z:0,h:0,speed:0,lap:1,time:0,bonus:0,half:false,lastIdx:0,nitro:100,region:''};
+const keys={};
+function resetRace(){
+  const i=N-8;
+  S.x=P[i].x;S.z=P[i].z;S.h=ang(i);S.speed=0;S.lap=1;S.time=0;S.bonus=0;S.half=false;S.lastIdx=i;S.nitro=100;S.region='';
+  gates.forEach(g=>g.done=false);
+  gates.forEach(g=>g.ring.visible=true);
+  $('lap').textContent=1;$('bonusTxt').textContent='';
+  camera.position.set(S.x-Math.sin(S.h)*14,7,S.z-Math.cos(S.h)*14);
+}
+const regions=[[0,60,'🌾 제주의 밭 · 돌담길'],[60,200,'🌊 해안도로 · 저 멀리 우도'],[200,250,'🕳️ 만장굴'],[250,310,'💧 천지연 폭포'],[310,430,'⛰️ 한라산 기슭'],[430,500,'🌸 벚꽃길'],[500,570,'🌲 사려니숲길'],[570,600,'🍊 감귤밭 · 돌담길']];
+function showRegion(t){const r=$('region');r.textContent=t;r.style.opacity=1;clearTimeout(showRegion.t);showRegion.t=setTimeout(()=>r.style.opacity=0,2600);}
+function toast(t,ms){const e=$('toast');e.textContent=t;e.style.opacity=1;clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.opacity=0,ms||1800);}
+const fmt=t=>{const m=Math.floor(t/60),s=t-m*60;return m+':'+(s<10?'0':'')+s.toFixed(1);};
+
+// ---------- 입력 ----------
+let miniKey=null;
+const kmap={ArrowUp:'up',w:'up',W:'up',ArrowDown:'down',s:'down',S:'down',ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right',Shift:'shift'};
+addEventListener('keydown',e=>{
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();
+  if(state==='mini'&&miniKey){miniKey(e);return;}
+  const k=kmap[e.key];if(k)keys[k]=true;
+});
+addEventListener('keyup',e=>{const k=kmap[e.key];if(k)keys[k]=false;});
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false;});
+
+// ---------- 물리 ----------
+function update(dt){
+  const q=nearest(S.x,S.z),onRoad=q.d<W+0.8;
+  let maxV=onRoad?55:18,nit=false;
+  if(keys.shift&&S.nitro>0&&keys.up){nit=true;S.nitro=Math.max(0,S.nitro-35*dt);maxV*=1.3;}
+  else S.nitro=Math.min(100,S.nitro+8*dt);
+  if(keys.up)S.speed+=(nit?55:28)*dt;
+  else if(keys.down)S.speed-=(S.speed>0?55:20)*dt;
+  else S.speed-=Math.sign(S.speed)*Math.min(Math.abs(S.speed),9*dt);
+  if(S.speed>maxV)S.speed=Math.max(maxV,S.speed-45*dt);
+  if(S.speed<-14)S.speed=-14;
+  const steer=(keys.left?1:0)-(keys.right?1:0);
+  const turn=2.0*(1-.4*Math.min(1,Math.abs(S.speed)/55));
+  S.h+=steer*turn*dt*Math.sign(S.speed)*Math.min(1,Math.abs(S.speed)/10);
+  S.x+=Math.sin(S.h)*S.speed*dt;S.z+=Math.cos(S.h)*S.speed*dt;
+  // 경계: 바다 / 한라산 / 월드
+  if(S.x>SEA_X){S.x=SEA_X;S.speed*=.9;}
+  if(S.x<-470){S.x=-470;S.speed*=.9;}
+  if(Math.abs(S.z)>440){S.z=Math.sign(S.z)*440;S.speed*=.9;}
+  const dx=S.x-HX,dz=S.z-HZ,dd=Math.hypot(dx,dz);
+  if(dd<HR){S.x=HX+dx/dd*HR;S.z=HZ+dz/dd*HR;S.speed*=.93;}
+  // 랩
+  const idx=q.i;
+  if(S.lastIdx>N*.85&&idx<N*.15){
+    if(S.half){S.lap++;S.half=false;gates.forEach(g=>{g.done=false;g.ring.visible=true;});
+      if(S.lap>LAPS){finish();return;}
+      $('lap').textContent=S.lap;toast('LAP '+S.lap+' / '+LAPS,1500);}
+  }
+  if(idx>N*.45&&idx<N*.55)S.half=true;
+  S.lastIdx=idx;
+  // 구역 이름
+  const r=regions.find(r=>idx>=r[0]&&idx<r[1]);
+  if(r&&r[2]!==S.region){S.region=r[2];showRegion(r[2]);}
+  // 게이트
+  for(const g of gates){
+    if(!g.done&&Math.hypot(S.x-g.pos.x,S.z-g.pos.z)<8){g.done=true;g.ring.visible=false;startMini(g);return;}
+  }
+  S.time+=dt;
+  // 표시
+  $('time').textContent=fmt(S.time-S.bonus*3);
+  $('speed').textContent=Math.round(Math.abs(S.speed)*3);
+  $('nitro').style.width=S.nitro+'%';
+}
+function placeCar(dt){
+  car.position.set(S.x,.25,S.z);car.rotation.y=S.h;
+  const fx=Math.sin(S.h),fz=Math.cos(S.h);
+  const tx=S.x-fx*13,tz=S.z-fz*13;
+  const k=1-Math.exp(-6*dt);
+  camera.position.x+=(tx-camera.position.x)*k;
+  camera.position.y+=(6.5-camera.position.y)*k;
+  camera.position.z+=(tz-camera.position.z)*k;
+  camera.lookAt(S.x+fx*8,2.2,S.z+fz*8);
+  const fov=62+Math.min(1,Math.abs(S.speed)/70)*16;
+  if(Math.abs(camera.fov-fov)>.1){camera.fov+=(fov-camera.fov)*k;camera.updateProjectionMatrix();}
+}
+
+// ---------- 미니맵 ----------
+const mapC=$('map'),mctx=mapC.getContext('2d');
+const mx=x=>(x+260)*.3+2,mz=z=>(z+215)*.3+3;
+const mapBg=document.createElement('canvas');mapBg.width=160;mapBg.height=120;
+{
+  const c=mapBg.getContext('2d');
+  c.fillStyle='#2ba3d8';c.fillRect(mx(SEA_X),0,160,120);
+  c.fillStyle='#8aa27a';c.beginPath();c.arc(mx(HX),mz(HZ),HR*.3,0,7);c.fill();
+  c.strokeStyle='#ddd';c.lineWidth=5;c.beginPath();P.forEach((p,i)=>i?c.lineTo(mx(p.x),mz(p.z)):c.moveTo(mx(p.x),mz(p.z)));c.closePath();c.stroke();
+}
+function drawMap(){
+  mctx.drawImage(mapBg,0,0);
+  gates.forEach(g=>{mctx.fillStyle=g.done?'#777':'#ffd23f';mctx.beginPath();mctx.arc(mx(g.pos.x),mz(g.pos.z),3.5,0,7);mctx.fill();});
+  mctx.fillStyle='#ff3b30';mctx.beginPath();mctx.arc(mx(S.x),mz(S.z),4,0,7);mctx.fill();
+}
+
+// ---------- 미니게임 ----------
+function openMini(html){$('miniBox').innerHTML=html;$('mini').style.display='flex';}
+function closeMini(success,msg){
+  miniKey=null;
+  const box=$('miniBox');
+  const res=document.createElement('div');
+  res.innerHTML='<h2 style="font-size:28px;margin-top:12px">'+(success?'🎉 성공! 기록 −3초':'😢 아쉬워요')+'</h2><p>'+msg+'</p>';
+  const b=document.createElement('button');b.textContent='계속 달리기';
+  b.onclick=()=>{
+    $('mini').style.display='none';
+    if(success){S.bonus++;$('bonusTxt').textContent='보너스 −'+(S.bonus*3)+'초';}
+    for(const k in keys)keys[k]=false;
+    state='race';
+  };
+  res.appendChild(b);box.appendChild(res);
+}
+function startMini(g){
+  state='mini';S.speed=0;
+  ({orange:gameOrange,fall:gameFall,maze:gameMaze})[g.type]();
+}
+function gameOrange(){
+  openMini('<h2>🍊 감귤 따기</h2><p>15초 안에 감귤을 클릭하세요! <b>10개 이상</b>이면 성공</p><div id="oa" class="area"></div><p>남은 시간 <b id="ot">15</b>초 · 딴 감귤 <b id="os">0</b>개</p>');
+  const area=$('oa');let score=0,left=15;
+  const spawn=setInterval(()=>{
+    const o=document.createElement('div');o.className='orange';o.textContent='🍊';
+    o.style.left=rr(0,470)+'px';o.style.top=rr(0,250)+'px';
+    o.onmousedown=()=>{score++;$('os').textContent=score;o.remove();};
+    area.appendChild(o);setTimeout(()=>o.remove(),1400);
+  },500);
+  const tick=setInterval(()=>{
+    left--;$('ot').textContent=left;
+    if(left<=0){clearInterval(spawn);clearInterval(tick);area.innerHTML='';closeMini(score>=10,'딴 감귤: '+score+'개');}
+  },1000);
+}
+function gameFall(){
+  openMini('<h2>💧 천지연 폭포 타이밍</h2><p>움직이는 막대가 <b style="color:#7fffb0">초록 구간</b>에 있을 때 <b>스페이스</b> 또는 클릭!<br>3번 중 2번 이상 맞추면 성공</p><div id="bar"><div id="zone"></div><div id="marker"></div></div><p id="ft">시도 0 / 3</p>');
+  const zl=36+rr(0,20);$('zone').style.left=zl+'%';$('zone').style.width='16%';
+  let tries=0,hits=0,t0=performance.now(),speed=1.4,raf,over=false;
+  const pos=()=>{const t=(performance.now()-t0)/1000*speed;const p=Math.abs(((t%2)+2)%2-1);return p*100;};
+  const loop=()=>{ $('marker').style.left='calc('+pos()+'% - 4px)';if(!over)raf=requestAnimationFrame(loop);};
+  loop();
+  const hit=()=>{
+    if(over)return;
+    const p=pos();tries++;
+    const ok=p>=zl&&p<=zl+16;if(ok)hits++;
+    $('ft').textContent='시도 '+tries+' / 3 · '+(ok?'✅ 명중!':'❌ 빗나감')+' (명중 '+hits+')';
+    speed+=.5;
+    if(tries>=3){over=true;cancelAnimationFrame(raf);document.removeEventListener('mousedown',clk);closeMini(hits>=2,'명중: '+hits+' / 3');}
+  };
+  const clk=e=>{if(e.target.closest('#bar,#miniBox')&&e.target.tagName!=='BUTTON')hit();};
+  document.addEventListener('mousedown',clk);
+  miniKey=e=>{if(e.key===' ')hit();};
+}
+function gameMaze(){
+  const n=11,cs=30;
+  const g=Array.from({length:n},()=>Array(n).fill(1));g[1][1]=0;
+  const st=[[1,1]];
+  while(st.length){
+    const [x,y]=st[st.length-1];
+    const d=[[2,0],[-2,0],[0,2],[0,-2]].filter(([dx,dy])=>{const nx=x+dx,ny=y+dy;return nx>0&&ny>0&&nx<n-1&&ny<n-1&&g[ny][nx]===1;});
+    if(!d.length){st.pop();continue;}
+    const [dx,dy]=d[Math.floor(Math.random()*d.length)];
+    g[y+dy/2][x+dx/2]=0;g[y+dy][x+dx]=0;st.push([x+dx,y+dy]);
+  }
+  openMini('<h2>🌿 미로 탈출</h2><p>방향키(WASD)로 <b>30초</b> 안에 🚩 깃발까지 가세요!</p><canvas id="mz" width="'+n*cs+'" height="'+n*cs+'"></canvas><p>남은 시간 <b id="mt">30</b>초</p>');
+  const c=$('mz').getContext('2d');let px=1,py=1,left=30,over=false;
+  const draw=()=>{
+    for(let y=0;y<n;y++)for(let x=0;x<n;x++){
+      c.fillStyle=g[y][x]?'#5f5a55':'#e6d9b0';c.fillRect(x*cs,y*cs,cs,cs);
+      if(g[y][x]){c.fillStyle='#77716b';c.fillRect(x*cs+3,y*cs+3,cs-8,cs-8);}
+    }
+    c.font='24px serif';c.textAlign='center';c.textBaseline='middle';
+    c.fillText('🚩',(n-2)*cs+cs/2,(n-2)*cs+cs/2+2);
+    c.fillText('🏎️',px*cs+cs/2,py*cs+cs/2+2);
+  };
+  draw();
+  const end=ok=>{if(over)return;over=true;clearInterval(tm);closeMini(ok,ok?'남은 시간 '+left+'초':'시간 초과!');};
+  miniKey=e=>{
+    const m={ArrowUp:[0,-1],w:[0,-1],ArrowDown:[0,1],s:[0,1],ArrowLeft:[-1,0],a:[-1,0],ArrowRight:[1,0],d:[1,0]}[e.key];
+    if(!m||over)return;
+    const nx=px+m[0],ny=py+m[1];
+    if(g[ny]&&g[ny][nx]===0){px=nx;py=ny;draw();if(px===n-2&&py===n-2)end(true);}
+  };
+  const tm=setInterval(()=>{left--;$('mt').textContent=left;if(left<=0)end(false);},1000);
+}
+
+// ---------- 흐름 ----------
+function best(){try{return parseFloat(localStorage.getItem('jeju_best'))||null;}catch(e){return null;}}
+function setBest(t){try{localStorage.setItem('jeju_best',t);}catch(e){}}
+function showBest(){const b=best();$('best').textContent=b?'🏆 최고 기록 '+fmt(b):'';}
+showBest();
+function finish(){
+  state='done';
+  const raw=S.time,final=S.time-S.bonus*3;
+  const grade=final<=100?'S':final<=120?'A':final<=150?'B':'C';
+  const b=best(),nb=!b||final<b;if(nb)setBest(final);
+  $('endBox').innerHTML='<h1>🏁 완주!</h1><p style="font-size:60px;margin:0;color:#ffd166"><b>'+grade+'</b></p>'
+    +'<p>주행 시간 '+fmt(raw)+'<br>미니게임 보너스 −'+(S.bonus*3)+'초 ('+S.bonus+'/'+(gates.length*LAPS)+' 성공)<br><b style="font-size:26px">최종 기록 '+fmt(final)+'</b></p>'
+    +(nb?'<p>🎉 최고 기록 갱신!</p>':'<p><small>최고 기록 '+fmt(b)+'</small></p>')
+    +'<p><small>제주의 자연을 달려 보았어요. 다음에는 한라산 위 눈 덮인 정상도 가 보세요!</small></p><button id="again">다시 달리기</button>';
+  $('end').style.display='flex';
+  $('again').onclick=()=>{$('end').style.display='none';begin();};
+}
+function begin(){
+  resetRace();state='countdown';$('menu').style.display='none';
+  const seq=['3','2','1','GO!'];let i=0;
+  const step=()=>{
+    $('big').textContent=seq[i];i++;
+    if(i<seq.length)setTimeout(step,900);
+    else{state='race';setTimeout(()=>$('big').textContent='',700);}
+  };
+  step();
+}
+$('startBtn').onclick=begin;
+$('laps').textContent=LAPS;
+
+// ---------- 메인 루프 ----------
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  if(state==='race')update(dt);
+  if(state==='menu'){
+    const t=now/6000;
+    camera.position.set(Math.cos(t)*300,90,Math.sin(t)*300);camera.lookAt(0,30,0);
+    car.position.set(0,-50,0);
+  }else{
+    placeCar(dt);drawMap();
+  }
+  renderer.render(scene,camera);
+  requestAnimationFrame(loop);
+}
+resetRace();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
